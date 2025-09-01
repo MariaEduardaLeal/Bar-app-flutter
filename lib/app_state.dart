@@ -6,8 +6,8 @@ import 'models.dart';
 class AppState with ChangeNotifier {
   final Dio _dio = Dio();
   // Altere este endereço IP para o endereço da sua máquina na rede local
-  final String _baseUrl = 'http://10.0.2.2:3000/api'; 
-  // final String _baseUrl = 'http://192.168.100.57:3000/api'; 
+  // final String _baseUrl = 'http://10.0.2.2:3000/api'; 
+  final String _baseUrl = 'https://bar-flutter-app.onrender.com/api'; 
 
   Employee? _currentUser;
   bool _isLoading = false;
