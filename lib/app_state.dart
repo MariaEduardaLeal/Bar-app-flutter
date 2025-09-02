@@ -6,8 +6,8 @@ import 'models.dart';
 class AppState with ChangeNotifier {
   final Dio _dio = Dio();
   // Altere este endereço IP para o endereço da sua máquina na rede local
-  // final String _baseUrl = 'http://10.0.2.2:3000/api'; 
-  final String _baseUrl = 'https://bar-flutter-app.onrender.com/api'; 
+  final String _baseUrl = 'http://10.0.2.2:3000/api'; 
+  // final String _baseUrl = 'https://bar-flutter-app.onrender.com/api'; 
 
   Employee? _currentUser;
   bool _isLoading = false;
@@ -134,20 +134,22 @@ class AppState with ChangeNotifier {
     }
   }
 
-  Future<void> placeOrder() async {
+  Future<void> sendOrderToKitchen() async {
     if (_cart.isEmpty) return;
 
     final orderData = {
+      'waiterId': _currentUser?.id,
       'tableId': _selectedTableId,
       'items': _cart.map((item) => {
         'productId': item.product.id,
         'quantity': item.quantity,
+        'price': item.product.price,
       }).toList(),
     };
 
     try {
-      await _dio.post('$_baseUrl/orders', data: orderData);
-
+      await _dio.post('$_baseUrl/orders/send-to-kitchen', data: orderData);
+      
       final tableIndex = _tables.indexWhere((table) => table.id == _selectedTableId);
       if (tableIndex >= 0) {
         _tables[tableIndex] = RestaurantTable(
@@ -157,12 +159,90 @@ class AppState with ChangeNotifier {
           capacity: _tables[tableIndex].capacity,
         );
       }
-
+      
       clearCart();
-      _selectedTableId = null;
       notifyListeners();
     } on DioException {
-      _error = 'Erro ao enviar pedido.';
+      _error = 'Erro ao enviar pedido para cozinha.';
+      notifyListeners();
+    }
+  }
+
+  Future<void> closeAccountAndFinalizeOrder() async {
+    if (_cart.isEmpty) return;
+
+    try {
+      // Primeiro, envia o último conjunto de itens
+      final orderData = {
+        'waiterId': _currentUser?.id,
+        'tableId': _selectedTableId,
+        'items': _cart.map((item) => {
+          'productId': item.product.id,
+          'quantity': item.quantity,
+          'price': item.product.price,
+        }).toList(),
+      };
+      final response = await _dio.post('$_baseUrl/orders/send-to-kitchen', data: orderData);
+      final orderId = response.data['orderId'];
+
+      // Depois, fecha a conta
+      await _dio.post('$_baseUrl/orders/close-account', data: {
+        'orderId': orderId,
+        'tableId': _selectedTableId,
+      });
+
+      final tableIndex = _tables.indexWhere((table) => table.id == _selectedTableId);
+      if (tableIndex >= 0) {
+        _tables[tableIndex] = RestaurantTable(
+          id: _tables[tableIndex].id,
+          number: _tables[tableIndex].number,
+          status: 'available',
+          capacity: _tables[tableIndex].capacity,
+        );
+      }
+      
+      _selectedTableId = null;
+      clearCart();
+      notifyListeners();
+    } on DioException {
+      _error = 'Erro ao fechar a conta.';
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchKitchenOrders() async {
+    _isLoading = true;
+    _error = '';
+    notifyListeners();
+    try {
+      final response = await _dio.get('$_baseUrl/kitchen/orders');
+      _orders = (response.data as List)
+          .map((json) => Order.fromJson(json))
+          .toList();
+      notifyListeners();
+    } on DioException {
+      _error = 'Erro ao carregar pedidos da cozinha.';
+      notifyListeners();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateOrderStatus(int orderId, String newStatus) async {
+    _isLoading = true;
+    _error = '';
+    notifyListeners();
+    try {
+      await _dio.patch('$_baseUrl/orders/$orderId/status', data: {
+        'status': newStatus,
+      });
+      await fetchKitchenOrders(); // Atualiza a lista de pedidos após a mudança
+    } on DioException {
+      _error = 'Erro ao atualizar o status do pedido.';
+      notifyListeners();
+    } finally {
+      _isLoading = false;
       notifyListeners();
     }
   }
