@@ -138,26 +138,43 @@ class CartScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+          // Botão "Enviar para Cozinha"
+          ElevatedButton(
+            onPressed: () async {
+              await appState.sendOrderToKitchen();
+              Navigator.pop(context); // Volta da CartScreen
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Pedido enviado com sucesso!')),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).primaryColor.withOpacity(0.8),
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: const Text('Enviar para Cozinha', style: TextStyle(fontSize: 18)),
+          ),
+          const SizedBox(height: 8),
+          // Botão "Fechar Conta e Finalizar"
           ElevatedButton(
             onPressed: () {
-              // Adiciona confirmação
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Text('Confirmar Pedido?'),
-                  content: const Text('Deseja finalizar o pedido?'),
+                  title: const Text('Confirmar Fechamento de Conta?'),
+                  content: const Text('Deseja fechar a conta e liberar a mesa?'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: const Text('Cancelar'),
                     ),
                     TextButton(
-                      onPressed: () {
-                        appState.placeOrder();
+                      onPressed: () async {
+                        await appState.closeAccountAndFinalizeOrder();
                         Navigator.pop(context); // Fecha dialog
                         Navigator.pop(context); // Volta da CartScreen
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Pedido enviado com sucesso!')),
+                          const SnackBar(content: Text('Conta fechada e mesa liberada!')),
                         );
                       },
                       child: const Text('Confirmar'),
@@ -167,11 +184,11 @@ class CartScreen extends StatelessWidget {
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              backgroundColor: Theme.of(context).colorScheme.secondary,
+              foregroundColor: Theme.of(context).colorScheme.onSecondary,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
-            child: const Text('Finalizar Pedido', style: TextStyle(fontSize: 18)),
+            child: const Text('Fechar Conta e Finalizar', style: TextStyle(fontSize: 18)),
           ),
         ],
       ),

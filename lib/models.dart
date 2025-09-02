@@ -29,17 +29,22 @@ class Employee {
 class RestaurantTable {
   final int id;
   final int number;
-  final String status;
-  final int? capacity; // Changed to nullable
+  final String? status;
+  final int? capacity;
 
-  RestaurantTable({required this.id, required this.number, required this.status, this.capacity}); 
+  RestaurantTable({
+    required this.id, 
+    required this.number, 
+    this.status, 
+    this.capacity
+  }); 
 
   factory RestaurantTable.fromJson(Map<String, dynamic> json) {
     return RestaurantTable(
       id: json['id'] as int,
       number: json['number'] as int,
-      status: json['status'] as String,
-      capacity: json['capacity'] as int?, // This is now correct
+      status: json['status'] as String?,
+      capacity: json['capacity'] as int?, 
     );
   }
 }
@@ -88,7 +93,8 @@ class Order {
   final int? tableId;
   final List<OrderItem> items;
   final String status; // 'pending', 'preparing', 'ready', 'delivered'
-  final DateTime timestamp;
+  final RestaurantTable? table;
+  final DateTime? createdAt;
 
   Order({
     required this.id,
@@ -96,7 +102,8 @@ class Order {
     this.tableId,
     required this.items,
     required this.status,
-    required this.timestamp,
+    this.table,
+    this.createdAt,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -107,7 +114,8 @@ class Order {
       tableId: json['table_id'] as int?,
       items: itemsJson.map((itemJson) => OrderItem.fromJson(itemJson as Map<String, dynamic>)).toList(),
       status: json['status'] as String,
-      timestamp: DateTime.parse(json['timestamp'] as String),
+      table: json['table'] != null ? RestaurantTable.fromJson(json['table'] as Map<String, dynamic>) : null,
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : null,
     );
   }
 }
