@@ -1,3 +1,4 @@
+// lib/waiter_dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -81,17 +82,15 @@ class _WaiterDashboardScreenState extends State<WaiterDashboardScreen> {
 
           return InkWell(
             onTap: () {
-              if (isAvailable) {
-                appState.selectTable(table.id);
-                appState.fetchProducts();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const MenuScreen()),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mesa ocupada!')),
-                );
+              appState.selectTable(table.id);
+              appState.fetchProducts();
+              // Adiciona a busca do pedido existente para mesas ocupadas
+              if (!isAvailable) {
+                appState.fetchOrderForTable(table.id);
               }
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const MenuScreen()),
+              );
             },
             child: Card(
               color: color,

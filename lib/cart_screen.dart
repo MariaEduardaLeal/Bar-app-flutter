@@ -1,17 +1,42 @@
+// lib/cart_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'app_state.dart';
 import 'models.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends StatefulWidget {
   const CartScreen({Key? key}) : super(key: key);
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  bool _isLoadingExistingOrder = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Verifica se a mesa já está ocupada e se há itens existentes para buscar
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final appState = Provider.of<AppState>(context, listen: false);
+      if (appState.selectedTableId != null) {
+        await appState.fetchOrderForTable(appState.selectedTableId!);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     
-    if (appState.cart.isEmpty) {
+    final isTakeaway = appState.selectedTableId == null;
+    final title = isTakeaway ? 'Carrinho (Pedido para Levar)' : 'Carrinho (Mesa ${appState.selectedTableId})';
+    final hasExistingOrder = appState.existingOrderItems.isNotEmpty;
+    final hasNewItems = appState.cart.isNotEmpty;
+
+    if (!hasExistingOrder && !hasNewItems) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Carrinho'),
@@ -33,9 +58,7 @@ class CartScreen extends StatelessWidget {
       );
     }
 
-    // Lógica corrigida para verificar se é pedido para levar
-    final isTakeaway = appState.selectedTableId == null;
-    final title = isTakeaway ? 'Carrinho (Pedido para Levar)' : 'Carrinho (Mesa ${appState.selectedTableId})';
+    double total = appState.cartTotal + appState.existingOrderItems.fold(0.0, (sum, item) => sum + (item.product.price * item.quantity));
 
     return Scaffold(
       appBar: AppBar(
@@ -46,26 +69,41 @@ class CartScreen extends StatelessWidget {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: appState.cart.length,
-              itemBuilder: (context, index) {
-                final cartItem = appState.cart[index];
-                return _buildCartItem(context, appState, cartItem);
-              },
+            child: ListView(
+              children: [
+                if (hasNewItems) ...[
+                  _buildSectionHeader('Itens do Pedido Atual'),
+                  ...appState.cart.map((item) => _buildCartItem(context, appState, item, isEditable: true)).toList(),
+                ],
+                if (hasExistingOrder) ...[
+                  if (hasNewItems) const Divider(height: 32),
+                  _buildSectionHeader('Itens Já Pedidos'),
+                  ...appState.existingOrderItems.map((item) => _buildExistingItem(item)).toList(),
+                ],
+              ],
             ),
           ),
-          _buildCartSummary(context, appState),
+          _buildCartSummary(context, appState, total),
         ],
       ),
     );
   }
 
-  Widget _buildCartItem(BuildContext context, AppState appState, CartItem item) {
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0),
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildCartItem(BuildContext context, AppState appState, CartItem item, {bool isEditable = true}) {
     return Card(
-      key: ValueKey(item.product.id), // Melhora performance em rebuilds
+      key: ValueKey(item.product.id),
       elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Row(
@@ -118,8 +156,54 @@ class CartScreen extends StatelessWidget {
       ),
     );
   }
+  
+  Widget _buildExistingItem(OrderItem item) {
+    return Card(
+      key: ValueKey(item.product.id),
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      color: Colors.grey.withOpacity(0.2), // Cor mais escura para desabilitar
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: Image.network(
+                item.product.image,
+                width: 60,
+                height: 60,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.fastfood, size: 60),
+              ),
+            ),
+            const SizedBox(width: 16.0),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.product.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white70),
+                  ),
+                  Text(
+                    'R\$ ${item.product.price.toStringAsFixed(2)}',
+                    style: const TextStyle(color: Colors.white54),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '${item.quantity}x',
+              style: const TextStyle(fontSize: 16, color: Colors.white70, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  Widget _buildCartSummary(BuildContext context, AppState appState) {
+  Widget _buildCartSummary(BuildContext context, AppState appState, double total) {
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -134,7 +218,7 @@ class CartScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Total do Pedido:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Text('R\$ ${appState.cartTotal.toStringAsFixed(2)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
+              Text('R\$ ${total.toStringAsFixed(2)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
             ],
           ),
           const SizedBox(height: 16),
