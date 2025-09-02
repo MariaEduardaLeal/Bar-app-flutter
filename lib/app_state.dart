@@ -6,8 +6,8 @@ import 'models.dart';
 class AppState with ChangeNotifier {
   final Dio _dio = Dio();
   // Altere este endereço IP para o endereço da sua máquina na rede local
-  final String _baseUrl = 'http://10.0.2.2:3000/api'; 
-  // final String _baseUrl = 'https://bar-flutter-app.onrender.com/api'; 
+  // final String _baseUrl = 'http://10.0.2.2:3000/api'; 
+  final String _baseUrl = 'https://bar-flutter-app.onrender.com/api'; 
 
   Employee? _currentUser;
   bool _isLoading = false;
@@ -17,6 +17,7 @@ class AppState with ChangeNotifier {
   List<Product> _products = [];
   final List<CartItem> _cart = [];
   List<Order> _orders = [];
+  List<OrderItem> _existingOrderItems = []; // Nova variável de estado
 
   Employee? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
@@ -26,6 +27,7 @@ class AppState with ChangeNotifier {
   List<Product> get products => _products;
   List<CartItem> get cart => _cart;
   List<Order> get orders => _orders;
+  List<OrderItem> get existingOrderItems => _existingOrderItems;
   double get cartTotal => _cart.fold(0.0, (total, current) => total + (current.product.price * current.quantity));
 
   Future<void> login(String username, String password) async {
@@ -63,11 +65,14 @@ class AppState with ChangeNotifier {
     _currentUser = null;
     _selectedTableId = null;
     clearCart();
+    _existingOrderItems = [];
     notifyListeners();
   }
 
   void selectTable(int? tableId) {
     _selectedTableId = tableId;
+    clearCart(); // Limpa o carrinho ao selecionar uma nova mesa
+    _existingOrderItems = []; // Limpa os itens de pedidos anteriores
     notifyListeners();
   }
 
@@ -100,6 +105,28 @@ class AppState with ChangeNotifier {
       notifyListeners();
     } on DioException {
       _error = 'Erro ao carregar produtos.';
+      notifyListeners();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchOrderForTable(int tableId) async {
+    _isLoading = true;
+    _error = '';
+    notifyListeners();
+    try {
+      final response = await _dio.get('$_baseUrl/orders/by-table/$tableId');
+      final order = Order.fromJson(response.data);
+      _existingOrderItems = order.items;
+      notifyListeners();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        _existingOrderItems = [];
+      } else {
+        _error = 'Erro ao carregar pedido da mesa.';
+      }
       notifyListeners();
     } finally {
       _isLoading = false;
@@ -161,6 +188,7 @@ class AppState with ChangeNotifier {
       }
       
       clearCart();
+      _existingOrderItems = [];
       notifyListeners();
     } on DioException {
       _error = 'Erro ao enviar pedido para cozinha.';
@@ -169,23 +197,29 @@ class AppState with ChangeNotifier {
   }
 
   Future<void> closeAccountAndFinalizeOrder() async {
-    if (_cart.isEmpty) return;
-
     try {
-      // Primeiro, envia o último conjunto de itens
-      final orderData = {
-        'waiterId': _currentUser?.id,
-        'tableId': _selectedTableId,
-        'items': _cart.map((item) => {
-          'productId': item.product.id,
-          'quantity': item.quantity,
-          'price': item.product.price,
-        }).toList(),
-      };
-      final response = await _dio.post('$_baseUrl/orders/send-to-kitchen', data: orderData);
-      final orderId = response.data['orderId'];
+      // Envia os itens novos primeiro, se houver
+      if (_cart.isNotEmpty) {
+        final orderData = {
+          'waiterId': _currentUser?.id,
+          'tableId': _selectedTableId,
+          'items': _cart.map((item) => {
+            'productId': item.product.id,
+            'quantity': item.quantity,
+            'price': item.product.price,
+          }).toList(),
+        };
+        await _dio.post('$_baseUrl/orders/send-to-kitchen', data: orderData);
+      }
 
-      // Depois, fecha a conta
+      // Obtém o ID do pedido (pode ser o que acabamos de criar ou o existente)
+      // A chamada para `fetchOrderForTable` garante que `existingOrderItems` e `_selectedTableId` estão preenchidos.
+      // Precisa de um endpoint para obter o orderId.
+      final response = await _dio.get('$_baseUrl/waiter/orders/by-table/$_selectedTableId');
+      final order = Order.fromJson(response.data);
+      final orderId = order.id;
+
+      // Fecha a conta
       await _dio.post('$_baseUrl/orders/close-account', data: {
         'orderId': orderId,
         'tableId': _selectedTableId,
@@ -203,6 +237,7 @@ class AppState with ChangeNotifier {
       
       _selectedTableId = null;
       clearCart();
+      _existingOrderItems = [];
       notifyListeners();
     } on DioException {
       _error = 'Erro ao fechar a conta.';
